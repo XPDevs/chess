@@ -340,6 +340,29 @@ body:not(.dark) .file-label{color:#bbb}
   .sidebar .game-controls{display:none}
   .game-over-box{padding:20px 24px}
 }
+
+/* Mobile setup screen */
+.mobile-setup{
+  display:none;position:fixed;inset:0;z-index:999999999;
+  background:var(--bg);overflow-y:auto;
+  align-items:center;justify-content:center
+}
+.mobile-setup-content{
+  width:100%;max-width:420px;display:flex;flex-direction:column;
+  gap:12px;padding:32px 20px
+}
+.mobile-setup-title{
+  text-align:center;font-size:2.2rem;font-weight:700;margin-bottom:2px
+}
+.mobile-setup-sub{
+  text-align:center;color:var(--warning-gray);font-size:14px;margin-bottom:8px
+}
+.mobile-setup .start-btn{
+  padding:14px;border:none;border-radius:var(--radius-6xl);cursor:pointer;
+  font-size:16px;font-weight:600;transition:filter 0.2s ease;
+  background:var(--board-accent);color:#fff;margin-top:4px;letter-spacing:.3px
+}
+.mobile-setup .start-btn:hover{filter:brightness(0.9)}
 </style>
 </head>
 <body>
@@ -364,12 +387,12 @@ body:not(.dark) .file-label{color:#bbb}
           <h2 id="gameOverTitle">Game Over</h2>
           <div class="elo-change" id="eloChangeDisplay"></div>
           <p id="gameOverDesc"></p>
-          <button onclick="resetGame()">Play Again</button>
+          <button onclick="newMobileGame()">Play Again</button>
         </div>
       </div>
     </div>
     <div class="mobile-board-controls" id="mobileBoardControls">
-      <button class="ctrl-btn new-game" onclick="resetGame()">New</button>
+      <button class="ctrl-btn new-game" onclick="newMobileGame()">New</button>
       <button class="ctrl-btn undo" onclick="undoMove()" id="mobileUndoBtn">Undo</button>
       <button class="ctrl-btn resign" onclick="resignGame()" id="mobileResignBtn">Resign</button>
       <button class="ctrl-btn draw" onclick="offerDraw()" id="mobileDrawBtn">Draw</button>
@@ -461,6 +484,46 @@ body:not(.dark) .file-label{color:#bbb}
       <button class="ctrl-btn flip" onclick="flipBoard()">Flip <span class="kbd-hint">⌘F</span></button>
       <button class="ctrl-btn draw" onclick="offerDraw()" id="drawBtn">Draw</button>
       <button class="ctrl-btn pgn" onclick="exportPGN()" id="pgnBtn">PGN</button>
+    </div>
+  </div>
+
+  <div class="mobile-setup" id="mobileSetup">
+    <div class="mobile-setup-content">
+      <div style="text-align:center;font-size:3rem;margin-bottom:4px">♚</div>
+      <h2 class="mobile-setup-title">Chess</h2>
+      <p class="mobile-setup-sub">Set up your game</p>
+
+      <div class="sidebar-card">
+        <span class="section-label">Mode</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="mode-btn active" id="setupModeAi" onclick="setMode('ai')">vs AI</button>
+          <button class="mode-btn" id="setupMode2p" onclick="setMode('2p')">vs Player</button>
+        </div>
+      </div>
+
+      <div class="sidebar-card" id="setupBotCard">
+        <span class="section-label">Opponent</span>
+        <div class="bot-grid" id="setupBotGrid"></div>
+        <div class="custom-elo-row">
+          <span style="font-size:9px;flex-shrink:0;color:var(--warning-gray)">ELO</span>
+          <input type="range" min="250" max="2300" value="800" step="50" class="elo-slider" id="setupEloSlider">
+          <span style="font-size:11px;color:var(--text);min-width:36px;text-align:right;font-family:monospace" id="setupEloDisplay">800</span>
+        </div>
+      </div>
+
+      <div class="sidebar-card">
+        <span class="section-label">Time</span>
+        <div class="time-controls" id="setupTimeControls">
+          <button class="time-btn active" data-minutes="0">No limit</button>
+          <button class="time-btn" data-minutes="10">10</button>
+          <button class="time-btn" data-minutes="15">15</button>
+          <button class="time-btn" data-minutes="20">20</button>
+          <button class="time-btn" data-minutes="25">25</button>
+          <button class="time-btn" data-minutes="30">30</button>
+        </div>
+      </div>
+
+      <button class="start-btn" id="startGameBtn" onclick="startMobileGame()">▶  Start Game</button>
     </div>
   </div>
 </div>
@@ -780,6 +843,20 @@ function stopClock(){if(clockInt){clearInterval(clockInt);clockInt=null;}}
 function cloneGame(g){return JSON.parse(JSON.stringify(g))}
 function initState(){return{board:createBoard(),turn:W,castling:{K:true,Q:true,k:true,q:true},enPassant:null,halfMove:0,fullMove:1,history:[],captured:{w:[],b:[]},inCheck:false,gameOver:false,result:null};}
 
+function showMobileSetup(){
+  document.getElementById('mobileSetup').style.display='flex';
+}
+function hideMobileSetup(){
+  document.getElementById('mobileSetup').style.display='none';
+}
+function newMobileGame(){
+  if(window.innerWidth<768){showMobileSetup();}
+  else{resetGame();}
+}
+function startMobileGame(){
+  hideMobileSetup();
+  resetGame();
+}
 function resetGame(){
   dbClearCurrentGame();
   stopClock();
@@ -1100,16 +1177,18 @@ document.addEventListener('keydown',e=>{
 });
 
 function renderBotGrid(){
-  const g=document.getElementById('botGrid');g.innerHTML='';
-  for(const b of BOTS){
-    const el=document.createElement('button');
-    el.className='bot-btn'+(b===aiBot?' active':'');
-    el.innerHTML='<span class="bot-name">'+b.n+'</span><span class="bot-elo">'+b.e+'</span>';
-    el.addEventListener('click',()=>{
-      if(animating)return;
-      selectBot(b);
-    });
-    g.appendChild(el);
+  for(const id of['botGrid','setupBotGrid']){
+    const g=document.getElementById(id);if(!g)continue;g.innerHTML='';
+    for(const b of BOTS){
+      const el=document.createElement('button');
+      el.className='bot-btn'+(b===aiBot?' active':'');
+      el.innerHTML='<span class="bot-name">'+b.n+'</span><span class="bot-elo">'+b.e+'</span>';
+      el.addEventListener('click',()=>{
+        if(animating)return;
+        selectBot(b);
+      });
+      g.appendChild(el);
+    }
   }
 }
 function selectBot(b){
@@ -1117,6 +1196,8 @@ function selectBot(b){
   aiBot=b;aiDepth=b.d;aiElo=b.e;
   document.getElementById('eloSlider').value=b.e;
   document.getElementById('eloDisplay').textContent=b.e;
+  const se=document.getElementById('setupEloSlider');if(se)se.value=b.e;
+  const sd=document.getElementById('setupEloDisplay');if(sd)sd.textContent=b.e;
   renderBotGrid();
   updateStatus();
   if(!aiThinking&&!replayMode&&!game.gameOver){render();}
@@ -1153,8 +1234,14 @@ function setMode(m){
   twoPlayer=m==='2p';
   document.getElementById('modeAiBtn').className='mode-btn'+(twoPlayer?'':' active');
   document.getElementById('mode2pBtn').className='mode-btn'+(twoPlayer?' active':'');
+  const setupAi=document.getElementById('setupModeAi');
+  if(setupAi)setupAi.className='mode-btn'+(twoPlayer?'':' active');
+  const setup2p=document.getElementById('setupMode2p');
+  if(setup2p)setup2p.className='mode-btn'+(twoPlayer?' active':'');
   document.getElementById('botPicker').style.display=twoPlayer?'none':'';
   document.getElementById('evalBar').style.display=twoPlayer?'none':'';
+  const setupBot=document.getElementById('setupBotCard');
+  if(setupBot)setupBot.style.display=twoPlayer?'none':'';
   stopClock();
   resetGame();
 }
@@ -1166,6 +1253,13 @@ document.getElementById('eloSlider').addEventListener('input',function(){
   document.querySelectorAll('.bot-btn').forEach(b=>b.classList.remove('active'));
   updateStatus();
   if(!aiThinking&&!replayMode&&!game.gameOver){render();}
+});
+const seSlider=document.getElementById('setupEloSlider');
+if(seSlider)seSlider.addEventListener('input',function(){
+  const elo=+this.value;
+  document.getElementById('setupEloDisplay').textContent=elo;
+  aiBot=null;aiElo=elo;const raw=Math.ceil((elo-50)/350);aiDepth=Math.max(1,Math.min(elo<=1500?4:5,raw));
+  document.querySelectorAll('.bot-btn').forEach(b=>b.classList.remove('active'));
 });
 document.querySelectorAll('.time-btn').forEach(btn=>{
   btn.addEventListener('click',function(){
@@ -1185,7 +1279,9 @@ document.querySelectorAll('.time-btn').forEach(btn=>{
   renderBotGrid();
   refreshGameHistory();
   const saved=await dbLoadCurrentGame();
-  if(saved&&saved.game){restoreGameState(saved);}else{resetGame();}
+  if(saved&&saved.game){hideMobileSetup();restoreGameState(saved);}
+  else if(window.innerWidth<768)showMobileSetup();
+  else resetGame();
 })();
 </script>
 </body>
